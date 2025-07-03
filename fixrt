@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+
+import subprocess
+
+
+def is_target_external(x):
+    if "." in x:
+        parts = [int(p) for p in x.split("/")[0].split(".")]
+        if parts[0] == 127:
+            return False
+        elif parts[0] == 10:
+            return False
+        elif parts[0] == 172 and 16 <= parts[1] <= 31:
+            return False
+        elif parts[0] == 192 and parts[1] == 168:
+            return False
+        elif parts[0] == 169 and parts[1] == 254:
+            return False
+        else:
+            return True
+    else:
+        parts = x.split(":")
+        if len(parts) == 8:
+            return parts[0] != "::1"
+        elif len(parts) == 4:
+            return parts[0] != "fe80" or parts[1] != "::1"
+        else:
+            x = x.lower()
+            if x == "::1":
+                return False # Loopback.
+            elif x.startswith("fe80:"):
+                return False # Link-local.
+            elif x.startswith("fc00:") or x.startswith("fd00:"):
+                return False # Unique local address.
+            elif x.startswith("ff00:") or x.startswith("ff"):
+                return False # Multicast.
+            elif x.startswith("2001:db8:"):
+                return False # Documentation.
+            elif x == "::":
+                return False # Unspecified.
+            else:
+                return True
+
+
+def probably_mac_address(x):
+    parts = x.split(":")
+    if len(parts) != 6:
+        return False
+    for part in parts:
+        if not 1 <= len(part) <= 2:
+            return False
+    else:
+        return True
+
+
+netstat = iter(subprocess.run(["netstat", "-rn"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout.splitlines())
+
+routes = {}
+default_gateway = None
+gateways = set()
+
+for line in netstat:
+    parts = line.split()
+    if parts == ["Destination", "Gateway", "Flags", "Netif", "Expire"]:
+        for line in netstat:
+            if not line:
+                break
+            target, gateway, *_ = line.split()
+            if target.endswith("/32"):
+                target = target[:-3]
+            if target == "default":
+                default_gateway = gateway
+            elif is_target_external(target):
+                if "#" not in gateway and not probably_mac_address(gateway):
+                    gateways.add(gateway)
+                routes[target] = gateway
+        break
+
+if not routes:
+    print("No routes found.")
+    exit(0)
+
+gateways.discard(default_gateway)
+gateways.discard("127.0.0.1")
+gateways = sorted(gateways, key=lambda x: (is_target_external(x), x))
+print("Routes:")
+max_size = max(map(len, routes))
+for target, gateway in routes.items():
+    if gateway == default_gateway:
+        print(f"{target.ljust(max_size)} -> {gateway} (default)")
+    else:
+        print(f"{target.ljust(max_size)} -> {gateway}")
+
+assert len(gateways) == 1, "Multiple gateways found, please resolve manually."
+gateway, = gateways
+
+targets_to_add = """
+18.158.148.112
+35.156.119.110
+
+4.225.11.192
+20.199.39.224
+20.250.119.64
+140.82.112.21
+140.82.112.22
+140.82.113.21
+140.82.113.22
+140.82.114.21
+140.82.114.22
+140.82.121.5
+140.82.121.6
+
+64.233.161.0/24
+64.233.162.0/24
+64.233.163.0/24
+64.233.164.0/24
+64.233.184.198
+74.125.3.0/24
+74.125.8.0/24
+74.125.11.0/24
+74.125.13.0/24
+74.125.71.198
+74.125.99.0/24
+74.125.100.0/24
+74.125.104.0/24
+74.125.108.0/24
+74.125.110.0/24
+74.125.111.0/24
+74.125.131.0/24
+74.125.153.0/24
+74.125.154.0/24
+74.125.155.0/24
+74.125.156.0/24
+74.125.160.0/24
+74.125.162.0/24
+74.125.162.0/24
+74.125.163.0/24
+74.125.172.0/24
+74.125.173.0/24
+74.125.205.0/24
+87.245.216.0/24
+89.113.122.0/24
+108.177.14.0/24
+108.177.15.0/24
+142.250.74.0/24
+142.250.150.0/24
+142.250.181.0/24
+142.250.184.0/24
+142.250.185.0/24
+142.250.186.0/24
+142.251.1.0/24
+157.240.252.0/24
+157.240.253.0/24
+172.217.16.0/24
+172.217.131.0/24
+172.217.132.0/24
+172.217.133.0/24
+173.194.1.0/24
+173.194.2.0/24
+173.194.6.0/24
+173.194.7.0/24
+173.194.10.0/24
+173.194.10.0/24
+173.194.18.0/24
+173.194.19.0/24
+173.194.24.0/24
+173.194.53.0/24
+173.194.56.0/24
+173.194.57.0/24
+173.194.73.0/24
+173.194.140.0/24
+173.194.141.0/24
+173.194.143.0/24
+173.194.151.0/24
+173.194.163.0/24
+173.194.176.0/24
+173.194.177.0/24
+173.194.178.0/24
+173.194.179.0/24
+173.194.180.0/24
+173.194.181.0/24
+173.194.182.0/24
+173.194.187.0/24
+173.194.188.0/24
+173.194.191.0/24
+173.194.217.0/24
+173.194.220.0/24
+173.194.221.0/24
+188.43.61.0/24
+188.234.138.0/24
+188.234.140.0/24
+195.95.178.0/24
+209.85.165.0/24
+209.85.226.0/24
+216.58.206.0/24
+216.58.212.0/24
+""".split()
+
+for target in targets_to_add:
+    subprocess.run(["sudo", "route", "add", target, gateway])
