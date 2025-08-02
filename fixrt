@@ -258,3 +258,5 @@ targets_to_add = """
 
 for target in targets_to_add:
     subprocess.run(["sudo", "route", "add", target, gateway])
+
+subprocess.run(["sudo", "route", "delete", "0/1"])
